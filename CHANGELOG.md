@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **VOLUME: a sound slider**, 0% (silent) to 100% in steps of 5, on the pause menu under FAST
+  FORWARD so it can be changed as you play (left and right), and in the game list's settings
+  page under a new SOUND group. It is kept with your other settings.
 - **New: iPhone and iPad.** A sideloaded app (`pokemon-ds-wide-ios.ipa`, iOS 14 or newer): the
   same game list and games as on Android, with the ROMs, saves and settings in the Files app
   (On My iPhone > Pokemon DS Widescreen).

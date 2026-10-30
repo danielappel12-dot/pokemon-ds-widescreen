@@ -62,6 +62,15 @@ PICTURE SETTINGS (Esc menu)
                      "Pokemon DS Launcher.exe" --game IREO (the game codes are under icons/).
 
 
+SOUND SETTINGS
+--------------
+
+  VOLUME             how loud the game is, 0% (silent) to 100% (the sound as the DS makes
+                     it), in steps of 5. On the Esc menu itself, under FAST FORWARD, so you
+                     can change it as you play with left and right; also under SOUND on the
+                     settings page (H in the game list).
+
+
 WHERE THINGS ARE KEPT
 ---------------------
 

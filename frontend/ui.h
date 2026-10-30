@@ -108,11 +108,12 @@ struct Canvas
             { 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E, 0x00 },
             { 0x00, 0x1F, 0x11, 0x11, 0x11, 0x1F, 0x00 },
             { 0x00, 0x04, 0x0A, 0x0A, 0x11, 0x1F, 0x00 },
+            { 0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03 }, // % (VOLUME)
         };
         if (c >= 'a' && c <= 'z') c -= 32;
         if (c >= 'A' && c <= 'Z') return font[c - 'A'];
         if (c >= '0' && c <= '9') return font[26 + c - '0'];
-        static const char punct[] = ":-+./<>!()\x01\x02\x03\x04";
+        static const char punct[] = ":-+./<>!()\x01\x02\x03\x04%";
         const char* p = c ? strchr(punct, c) : nullptr;
         return p ? font[36 + (p - punct)] : nullptr;
     }
@@ -134,6 +135,19 @@ struct Canvas
 };
 
 // Button presses the menu understands, edge-triggered.
+// A slider's bar (VOLUME): a track with its filled part, `pct` of 100. Shared by the pause menu
+// and the game list's settings page.
+inline void DrawBar(Canvas& c, int x, int y, int w, int h, int pct, bool sel)
+{
+    if (w < 4 * h) return; // (no room beside a long label)
+    pct = pct < 0 ? 0 : pct > 100 ? 100 : pct;
+    c.Fill(x, y, w, h, sel ? 0xFF22407E : 0xFF2E3D5C);
+    c.Fill(x, y, w * pct / 100, h, sel ? 0xFFFFFFFF : 0xFFC8D0E0);
+    // (A knob at the level, a little taller than the track.)
+    const int kx = x + (w - h) * pct / 100;
+    c.Fill(kx, y - h / 2, h, h * 2, sel ? 0xFFFFD75E : 0xFFE8E8E8);
+}
+
 struct MenuInput
 {
     bool up = false, down = false, left = false, right = false, accept = false, back = false;
@@ -143,6 +157,7 @@ struct MenuItem
 {
     std::string label;
     std::string value; // shown right-aligned; empty for plain actions
+    int bar = -1;      // 0-100: a slider's bar drawn between the label and the value (VOLUME)
 };
 
 struct Menu
@@ -258,6 +273,14 @@ struct Menu
             {
                 std::string v = "< " + items[i].value + " >";
                 c.Text(bx + boxW - 6 * scale - Canvas::TextWidth(v, scale), y, v, scale, col);
+            }
+            if (items[i].bar >= 0)
+            {
+                // (Between the label and the widest value, "< 100% >", so that it stays put as
+                // the value changes.)
+                const int x0 = bx + 6 * scale + Canvas::TextWidth(items[i].label, scale) + 6 * scale;
+                const int x1 = bx + boxW - 6 * scale - Canvas::TextWidth("< 100% >", scale) - 6 * scale;
+                DrawBar(c, x0, y + 2 * scale, x1 - x0, 3 * scale, items[i].bar, sel);
             }
             y += lineH;
         }

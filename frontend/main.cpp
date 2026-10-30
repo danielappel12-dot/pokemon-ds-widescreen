@@ -1307,6 +1307,8 @@ struct Settings
     // the bottom screen up.
     bool padTouch = false;
     bool showFps = false; // frames shown per second, in a corner
+    // VOLUME: the sound's level, 0 (silent) to 100 (as the DS makes it), in steps of 5.
+    int volume = 100;
     // A controller's START (+ on the Switch) opens the pause menu instead of being the DS's
     // START, which the games hardly use (START BUTTON: PAUSE MENU or DS START).
     bool startMenu = true;
@@ -1376,6 +1378,7 @@ struct Settings
             else if (k == "fps60") fps60 = v == "1";
             else if (k == "pad_touch") padTouch = v == "1";
             else if (k == "show_fps") showFps = v == "1";
+            else if (k == "volume") volume = std::clamp(atoi(v.c_str()), 0, 100);
             else if (k == "ff_low_res") ffLowRes = v == "1";
             else if (k == "start_button") startMenu = v != "ds";
             else if (k == "cpu_boost") cpuBoost = v == "1";
@@ -1418,6 +1421,7 @@ struct Settings
         f << "fps60=" << (fps60 ? 1 : 0) << "\n";
         f << "pad_touch=" << (padTouch ? 1 : 0) << "\n";
         f << "show_fps=" << (showFps ? 1 : 0) << "\n";
+        f << "volume=" << volume << "\n";
         f << "ff_low_res=" << (ffLowRes ? 1 : 0) << "\n";
         f << "start_button=" << (startMenu ? "menu" : "ds") << "\n";
         f << "battle_buttons=" << (battleButtons == 0 ? "corner" : battleButtons == 2 ? "panel" : "strip") << "\n";
@@ -3868,7 +3872,7 @@ int main(int argc, char** argv)
         M_RESUME, M_LAYOUT, M_LARGE, M_FPS60, M_FULLSCREEN, M_SMOOTH, M_WIDE, M_WIDEMAP, M_BATTLEBUTTONS,
         M_WIDELINES, M_AUTODETAIL, M_WIDEGPU, M_GPU3D, M_SHOWFPS, M_BUTTONS, M_PADTOUCH, M_EMULATION,
         M_CONTROLS, M_STARTBTN, M_FAST, M_FFLOWRES, M_SAVESTATE, M_LOADSTATE, M_RESET, M_QUIT,
-        M_DISPLAY, M_GRAPHICS, M_CONTROLMENU, M_BACK, M_CHEATS, M_NOTHING,
+        M_DISPLAY, M_GRAPHICS, M_CONTROLMENU, M_BACK, M_CHEATS, M_NOTHING, M_VOLUME,
         M_CHEAT0 = 1000 // (M_CHEAT0 + i: cheat i, CHEATS)
     };
     enum { PAGE_MAIN, PAGE_KEYS, PAGE_DISPLAY, PAGE_GRAPHICS, PAGE_CONTROLS, PAGE_CHEATS };
@@ -3936,6 +3940,9 @@ int main(int argc, char** argv)
             add(M_SAVESTATE, "SAVE STATE", "");
             add(M_LOADSTATE, "LOAD STATE", "");
             add(M_FAST, "FAST FORWARD", onOff(fastLock));
+            // (On the menu itself rather than a page of its own: it is what is changed while playing.)
+            add(M_VOLUME, "VOLUME", std::to_string(cfg.volume) + "%");
+            menu.items.back().bar = cfg.volume;
             add(M_DISPLAY, "DISPLAY", "");
             add(M_GRAPHICS, "GRAPHICS", "");
             add(M_CONTROLMENU, "CONTROLS", "");
@@ -5237,6 +5244,11 @@ int main(int argc, char** argv)
             case M_FAST:
                 fastLock = !fastLock;
                 break;
+            case M_VOLUME:
+                // Left and right (and taps on the box's left or right part) move it a step; A
+                // alone changes nothing, as the slider has no "next value" to go round to.
+                cfg.volume = std::clamp(cfg.volume + dir * 5, 0, 100);
+                break;
 #if !defined(__SWITCH__) && !defined(SSR_PHONE)
             case M_FFLOWRES:
                 cfg.ffLowRes = !cfg.ffLowRes;
@@ -6346,6 +6358,15 @@ int main(int argc, char** argv)
             if (audioStretch.Stretching() && speed == 1) slowdown *= 1.0 + 0.5 * (4800 - queued) / 4800.0;
             audioOut.clear();
             audioStretch.Process(audioBuf.data(), got, slowdown, audioOut);
+            // VOLUME: the level squared, as loudness is heard on a roughly logarithmic scale (50% is
+            // about -12 dB, which sounds about half as loud; 100% is the sound untouched). Applied
+            // after the stretching so that it never changes how the queue is steered, and the
+            // samples still go out at 0% so the sound's timing carries on as before.
+            if (cfg.volume < 100)
+            {
+                const int32_t gain = cfg.volume * cfg.volume * 32768 / 10000; // (1.0 is 32768)
+                for (int16_t& v : audioOut) v = (int16_t)((v * gain) >> 15);
+            }
             // Drop audio rather than let latency grow if the queue backs up.
             if (queued < 48000 / 4 && !audioOut.empty())
                 SDL_QueueAudio(audio, audioOut.data(), (Uint32)(audioOut.size() * 2));
@@ -6515,6 +6536,7 @@ int main(int argc, char** argv)
             if (selId == M_FFLOWRES) hint = "ON: MORE FPS IN FAST FORWARD";
 #endif
             // (What START BUTTON does, while it is the one chosen.)
+            if (selId == M_VOLUME && !(touchPadUsed && touchPad.visible)) hint = "LEFT / RIGHT: QUIETER / LOUDER";
             if (selId == M_STARTBTN) hint = cfg.startMenu ? "START OPENS THIS MENU" : "START IS THE DS START";
             if (selId == M_CONTROLS) hint = "GIVE ANY BUTTON ANOTHER KEY OR BUTTON";
             if (selId == M_CHEATS) hint = cheats.items.empty() ? "NONE FOUND: SEE THE README" : "ACTION REPLAY CODES";

@@ -447,7 +447,7 @@ inline int Draw(Canvas& c, const std::vector<Game>& games, int selected, int& fi
 // options with what each does, set here before playing. They are written to the same settings
 // file the games read (main.cpp, Settings: keys, values and defaults must stay in step with it),
 // a line at a time, leaving the others as they are. Entries without a key are what can only be
-// done in the pause menu. The list's font has capitals, digits and : - + . / < > ! ( ) only.
+// done in the pause menu. The list's font has capitals, digits and : - + . / < > ! ( ) % only.
 struct Setting
 {
     const char* key;  // nullptr: told about, not set here; "!...": something to do, not stored
@@ -509,6 +509,13 @@ inline std::vector<Setting> SettingsList()
 #endif
 #endif
     l.push_back({ "show_fps", "FPS COUNTER", onOff, "0", "SHOWS THE FRAMES A SECOND IN A CORNER." });
+    {
+        // (0% to 100% in steps of 5, as in the pause menu: main.cpp, M_VOLUME. A slider: Change
+        // stops at its ends instead of going round, and Draw shows a bar.)
+        std::vector<std::pair<std::string, std::string>> levels;
+        for (int v = 0; v <= 100; v += 5) levels.push_back({ std::to_string(v), std::to_string(v) + "%" });
+        l.push_back({ "volume", "VOLUME", levels, "100", "HOW LOUD THE GAME IS. 100% IS THE SOUND AS THE DS MAKES IT. 0% IS SILENT. ALSO IN THE PAUSE MENU TO CHANGE AS YOU PLAY." });
+    }
 #ifdef __SWITCH__
     l.push_back({ "start_button", "START BUTTON", { { "menu", "PAUSE MENU" }, { "ds", "DS START" } }, "menu",
                   "PAUSE MENU: + OPENS THE PAUSE MENU WHILE PLAYING. DS START: + IS THE DS START BUTTON (THE GAMES HARDLY USE IT) AND + AND - TOGETHER OPEN THE MENU." });
@@ -599,24 +606,26 @@ inline const std::vector<SettingsGroup>& SettingsGroups()
         // (What each holds is listed under it: its options' names, ShowGroups.)
         { "!group0", "DISPLAY", "" },
         { "!group1", "GRAPHICS", "" },
-        { "!group2", "CONTROLS", "" },
-        { "!group3", "SHORTCUTS", "" },
-        { "!group4", "HELP", "" },
+        { "!group2", "SOUND", "" },
+        { "!group3", "CONTROLS", "" },
+        { "!group4", "SHORTCUTS", "" },
+        { "!group5", "HELP", "" },
     };
     return g;
 }
 // Which group an option is in (SettingsGroups).
 inline int GroupOf(const Setting& s)
 {
-    if (!s.key) return !strcmp(s.name, "KEYS AND BUTTONS") ? 2 : 4;
+    if (!s.key) return !strcmp(s.name, "KEYS AND BUTTONS") ? 3 : 5;
+    if (!strcmp(s.key, "volume")) return 2;
     static const char* display[] = { "view", "large_screen", "fullscreen", "smooth", "battle_buttons", "show_fps" };
     static const char* controls[] = { "start_button", "buttons", "pad_touch" };
     for (const char* k : display)
         if (!strcmp(s.key, k)) return 0;
     for (const char* k : controls)
-        if (!strcmp(s.key, k)) return 2;
-    if (!strcmp(s.key, "!keys")) return 2;
-    if (s.key[0] == '!') return 3; // (DESKTOP SHORTCUTS, HOME MENU ICONS)
+        if (!strcmp(s.key, k)) return 3;
+    if (!strcmp(s.key, "!keys")) return 3;
+    if (s.key[0] == '!') return 4; // (DESKTOP SHORTCUTS, HOME MENU ICONS)
     return 1;
 }
 
@@ -757,7 +766,9 @@ struct SettingsPage
         if (s.key[0] == '!') return s.key; // (done by the caller)
         const int n = (int)s.values.size();
         const int i = ValueIndex(s);
-        const int next = i < 0 ? (d > 0 ? 0 : n - 1) : (i + d + n) % n;
+        // (A slider stops at its ends: right on 100% is not 0%.)
+        const bool slider = !strcmp(s.key, "volume");
+        const int next = i < 0 ? (d > 0 ? 0 : n - 1) : slider ? std::max(0, std::min(n - 1, i + d)) : (i + d + n) % n;
         const std::string line = std::string(s.key) + "=" + s.values[next].first;
         bool found = false;
         for (std::string& l : lines)
@@ -832,6 +843,13 @@ struct SettingsPage
                     const bool group = !strncmp(items[l.item].key, "!group", 6);
                 const std::string v = sel && !group ? "< " + l.value + " >" : l.value;
                     c.Text(x + width - Canvas::TextWidth(v, ts), y, v, ts, sel ? th.nameSel : th.name);
+                    if (!strcmp(items[l.item].key, "volume"))
+                    {
+                        // (Its bar, ending where the widest value starts so it does not move.)
+                        const int bw = std::min(width / 3, 120 * ts);
+                        const int bx = x + width - Canvas::TextWidth("< 100% >", ts) - 6 * ts - bw;
+                        DrawBar(c, bx, y + 2 * ts, bw, 3 * ts, atoi(Stored("volume").empty() ? items[l.item].def.c_str() : Stored("volume").c_str()), sel);
+                    }
                 }
             }
             else if (!l.text.empty())

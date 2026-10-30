@@ -1,0 +1,63 @@
+# Builds Pokemon DS Widescreen.app for Apple silicon with the VOLUME slider (this branch's change),
+# on every push to this branch. Without SoulSilver's tables (none are given to this workflow):
+# Platinum, Black, White, Black 2 and White 2 play; SoulSilver and HeartGold show NOT PLAYABLE.
+# The game list's pictures and the icon are copied from the project's own published Mac download.
+name: Mac app with volume slider
+
+on:
+  push:
+    branches: [volume-slider]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install "cmake>=3.21,<4" ninja
+      - name: Box art and icon, from the project's published Mac download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          mkdir -p inputs
+          UP=mamesj/pokemon-ds-widescreen
+          for t in $(gh release list -R $UP --limit 40 --json tagName --jq '.[].tagName'); do
+            if gh release download "$t" -R $UP -p pokemon-ds-wide-pc-macos-arm64.zip -D inputs 2>/dev/null; then
+              echo "from release $t"; break
+            fi
+          done
+          if [ -f inputs/pokemon-ds-wide-pc-macos-arm64.zip ]; then
+            ditto -x -k inputs/pokemon-ds-wide-pc-macos-arm64.zip inputs/old
+            OLD="inputs/old/Pokemon DS Widescreen.app"
+            python3 tools/mac/extract_art.py "$OLD/Contents/MacOS/pokemon-ds-wide" inputs/box-art || rm -rf inputs/box-art
+            sips -s format png "$OLD/Contents/Resources/AppIcon.icns" --out inputs/icon.png >/dev/null || rm -f inputs/icon.png
+          else
+            echo "no published Mac download found: building without box art and icon"
+          fi
+          ls -R inputs | head -30
+      - name: Build
+        env:
+          SSR_MAC_ARCH: arm64
+        run: |
+          ART=""; ICON=""
+          [ -d inputs/box-art ] && ART=inputs/box-art
+          [ -f inputs/icon.png ] && ICON=inputs/icon.png
+          tools/mac/build_all.sh tools/bw2/stubgen "$ART" "$ICON"
+      - name: Check the volume slider is in it
+        run: |
+          BIN="build-mac-dist/Pokemon DS Widescreen.app/Contents/MacOS/pokemon-ds-wide"
+          lipo -archs "$BIN"
+          strings "$BIN" | grep -E "QUIETER / LOUDER|HOW LOUD THE GAME IS" | head -3
+          strings "$BIN" | grep -q "QUIETER / LOUDER"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pokemon-ds-wide-volume-macos-arm64
+          path: build-mac-dist/pokemon-ds-wide-pc-macos-arm64.zip
+          if-no-files-found: error
